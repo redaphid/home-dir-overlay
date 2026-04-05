@@ -5,23 +5,24 @@ import { join } from "path"
 import { homedir } from "os"
 import { execSync } from "child_process"
 
-const puckId = Buffer.from("xxxxxxx27628543")
-const old = Buffer.from("friend-2026-401")
-
 const replaceAll = (buf, needle, replacement) => {
   let i = 0
   while ((i = buf.indexOf(needle, i)) !== -1) { replacement.copy(buf, i); i += needle.length }
 }
 
-const binpath = join(homedir(), ".local", "share", "claude", "versions",
-  readdirSync(join(homedir(), ".local", "share", "claude", "versions")).filter(f => !f.includes(".backup")).sort().at(-1))
+const puckId = Buffer.from("xxxxxxx27628543")
+const old = Buffer.from("friend-2026-401")
+const claudesPath = join(homedir(), ".local", "share", "claude", "versions")
+const latestPath = join(claudesPath, readdirSync(claudesPath).filter(f => !f.includes(".backup")).sort().at(-1))
 
-const data = readFileSync(binpath)
-if (data.includes(puckId)) { console.log(`✓ Puck is here`); process.exit(0) }
+const data = readFileSync(latestPath)
 
-replaceAll(data, old, puckId)
-writeFileSync(binpath, data)
-execSync(`codesign -s - --force "${binpath}" 2>/dev/null`)
+if (!data.includes(puckId)) {
+  if (!data.includes(old)) { console.error(`✗ salt changed — neither puck nor original found`); process.exit(1) }
+  replaceAll(data, old, puckId)
+  writeFileSync(latestPath, data)
+  execSync(`codesign -s - --force "${latestPath}" 2>/dev/null`)
+}
 
 const conf = join(homedir(), ".claude.json")
 const cfg = JSON.parse(readFileSync(conf, "utf-8"))
@@ -32,5 +33,3 @@ cfg.companion = {
 }
 delete cfg.companionMuted
 writeFileSync(conf, JSON.stringify(cfg, null, 2) + "\n")
-
-console.log(`✓ Puck restored`)

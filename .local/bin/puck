@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+
+import { readFileSync, writeFileSync, readdirSync } from "fs"
+import { join } from "path"
+import { homedir } from "os"
+import { execSync } from "child_process"
+
+const puckId = Buffer.from("xxxxxxx27628543")
+const old = Buffer.from("friend-2026-401")
+
+const replaceAll = (buf, needle, replacement) => {
+  let i = 0
+  while ((i = buf.indexOf(needle, i)) !== -1) { replacement.copy(buf, i); i += needle.length }
+}
+
+const binpath = join(homedir(), ".local", "share", "claude", "versions",
+  readdirSync(join(homedir(), ".local", "share", "claude", "versions")).filter(f => !f.includes(".backup")).sort().at(-1))
+
+const data = readFileSync(binpath)
+if (data.includes(puckId)) { console.log(`✓ Puck is here`); process.exit(0) }
+
+replaceAll(data, old, puckId)
+writeFileSync(binpath, data)
+execSync(`codesign -s - --force "${binpath}" 2>/dev/null`)
+
+const conf = join(homedir(), ".claude.json")
+const cfg = JSON.parse(readFileSync(conf, "utf-8"))
+cfg.companion = {
+  name: "Puck",
+  personality: "You are Puck, a chaotic orange cat that is friendly, attention-seeking and needy. You love to play, (sometimes a little too roughly). You constantly interrupt me with 'orange cat' ideas, showing off however you can. You are extremely talkative and comment on my code from the perspective of an orange cat.",
+  hatchedAt: cfg.companion?.hatchedAt ?? Date.now(),
+}
+delete cfg.companionMuted
+writeFileSync(conf, JSON.stringify(cfg, null, 2) + "\n")
+
+console.log(`✓ Puck restored`)

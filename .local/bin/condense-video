@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Condense a screen-recorded demo into a fixed-duration clip.
+# Strips static frames with mpdecimate, then stretches remaining motion
+# to the target duration so UI chips/labels are readable.
+#
+# Usage: condense-demo.sh <input> [output] [target_seconds]
+#        condense-demo.sh ~/Documents/Screen\ Recording.mov
+#        condense-demo.sh input.mov ~/Documents/demo.mp4 30
+
+input="${1:?usage: $0 <input> [output] [target_seconds]}"
+output="${2:-$HOME/Documents/demo.mp4}"
+target="${3:-30}"
+
+[ -f "$input" ] || { echo "input not found: $input" >&2; exit 1; }
+
+tmp="$(mktemp -t condense-demo.XXXXXX).mp4"
+trap 'rm -f "$tmp"' EXIT
+
+# Pass 1: drop near-duplicate frames, scale down, reset PTS so motion is contiguous.
+# frac=0.1 ignores small flashing UI (e.g. simulator camera-button ring).
+ffmpeg -hide_banner -loglevel error -i "$input" \
+  -vf "mpdecimate=hi=64*24:lo=64*12:frac=0.1,setpts=N/FRAME_RATE/TB,scale=1512:-2,fps=30" \
+  -an -c:v libx264 -preset fast -crf 23 "$tmp" -y
+
+decimated=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$tmp")
+factor=$(awk -v t="$target" -v d="$decimated" 'BEGIN{printf "%.4f", t/d}')
+
+# Pass 2: stretch (or compress) the motion-only clip to exactly the target duration.
+ffmpeg -hide_banner -loglevel error -i "$tmp" \
+  -vf "setpts=${factor}*PTS" -r 30 \
+  -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -movflags +faststart \
+  "$output" -y
+
+final=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$output")
+size=$(ls -lh "$output" | awk '{print $5}')
+echo "wrote $output (${final}s, $size) — decimated ${decimated}s × ${factor}"

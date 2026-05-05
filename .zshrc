@@ -84,7 +84,15 @@ setopt INC_APPEND_HISTORY     # Add commands as they're typed
 FPATH="/opt/homebrew/share/zsh-completions:/opt/homebrew/share/zsh/site-functions:$FPATH"
 
 # fnm (Fast Node Manager)
-eval "$(fnm env --use-on-cd)"
+eval "$(fnm env)"
+autoload -U add-zsh-hook
+_fnm_autoload_hook() {
+    if [[ -f .node-version || -f .nvmrc || -f package.json ]]; then
+        fnm use --install-if-missing --silent-if-unchanged
+    fi
+}
+add-zsh-hook chpwd _fnm_autoload_hook
+_fnm_autoload_hook
 
 # Only rebuild completions once per day
 autoload -Uz compinit
@@ -363,3 +371,4 @@ print(f'{pct:.0f}% (resets {end} UTC)')
 }
 
 export PATH=$PATH:$HOME/.maestro/bin
+
